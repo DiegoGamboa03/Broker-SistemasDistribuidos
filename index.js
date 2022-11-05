@@ -52,14 +52,41 @@ io.on("connection",  (socket) => {
     });
 
     socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
-      
+      let returnCode;
       console.log(jsonSUBSCRIBE);
-      // Aqui tiene que estar la parte donde se verifica la bbdd mediante la api 
+      // Aqui tiene que estar la parte donde se verifica la bbdd mediante la api
+      console.log(jsonSUBSCRIBE);
+      //Verificar topic en Topics
+      const res = await fetch("http://localhost:3000/Topics/" + jsonSUBSCRIBE['Topic'])
+      if(res.status == 500){
+        returnCode = 1;
+      }else if(res.status == 202){
+        returnCode = 2
+      }else{
+        const json = await res.json();
+        returnCode = 0;
+      }
+
       //si todo esta bien permite la sub si no esta bien, manda error
+      if (returnCode == 0){
+        //Guardar suscripción
+        const res = await fetch("http://localhost:3000/Subscribers/add/",{
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            Device: jsonSUBSCRIBE['Client-ID'],
+            Topic: jsonSuBSCRIBE['Topic']
+          })
+        })
+      }
+      
       let jsonSUBACK= {
         "sessionPresent":1,
-        "returnCode": 2
+        "returnCode": returnCode
       }
+      console.log(jsonSUBACK);
 
       io.to(socket.id).emit('SUBACK',jsonSUBACK);
       
