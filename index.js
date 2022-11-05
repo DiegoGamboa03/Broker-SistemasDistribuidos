@@ -88,9 +88,30 @@ io.on("connection",  (socket) => {
       
     });
 
-  socket.on("PUBLISH", (jsonPUBLISH) => {
+  socket.on("PUBLISH", async (jsonPUBLISH) => {
+    let returnCode;
     console.log(jsonPUBLISH);
-    //Revisar que ese topico existe y el cliente sea publicador de ese topico
+    let topic = jsonPUBLISH['Topic'];
+
+    const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['Client-ID'] + "/" + topic.replaceAll('/', "-"))
+    if(res.status == 500){
+      console.log('error in server');
+      return ;
+    }else{
+      const json = await res.json();
+      console.log(json);
+      if(json['isPublisher'] == 1){
+        io.broadcast.emit('PUBLISH',jsonPUBLISH);  
+      }else{
+        //En este caso que se hace?
+        //io.to(socket.id).emit('ERROR',jsonSUBACK);
+      }
+    }
+
+
+
+    //Hay que revisar que el idClient que manda el publish sea publicador de ese topico
+    
     
   });
 });
