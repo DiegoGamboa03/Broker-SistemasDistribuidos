@@ -90,7 +90,6 @@ io.on("connection",  (socket) => {
 
   socket.on("PUBLISH", async (jsonPUBLISH) => {
     let returnCode;
-    console.log(jsonPUBLISH);
     let topic = jsonPUBLISH['Topic'];
 
     const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['Client-ID'] + "/" + topic.replaceAll('/', "-"))
@@ -100,8 +99,9 @@ io.on("connection",  (socket) => {
     }else{
       const json = await res.json();
       console.log(json);
-      if(json['isPublisher'] == 1){
-        io.broadcast.emit('PUBLISH',jsonPUBLISH);  
+      if(json['isPublisher'] === 1){
+        console.log('HOLAAA');
+        socket.broadcast.emit('PUBLISH',jsonPUBLISH);  
       }else{
         //En este caso que se hace?
         //io.to(socket.id).emit('ERROR',jsonSUBACK);
