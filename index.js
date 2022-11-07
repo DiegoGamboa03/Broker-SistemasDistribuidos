@@ -1,7 +1,7 @@
 import  express, { json, response }  from "express";
 import morgan from "morgan";
 import {Server as socketServer} from 'socket.io';
-import http from 'http'
+import http, { ClientRequest } from 'http'
 import cors from 'cors'
 
 //Configuraciones del server
@@ -15,10 +15,13 @@ const io = new socketServer(server, {
 app.use(cors());
 app.use(morgan("dev"));
 
+//Array of clients JSON
+var clients = []
+
+
 io.on("connection",  (socket) => {
     
-    console.log(socket.id);
-    
+    //console.log(clients);
     socket.on("CONNECT", async (jsonCONNECT) => {
         let sessionPresent, returnCode; 
         //returnCode: 0 = Accepted
@@ -29,7 +32,7 @@ io.on("connection",  (socket) => {
         //verificacion: si el ID que se esta intentando conectar esta en la tabla device
         //verificacion:  
         
-        console.log(jsonCONNECT);
+      
         
         sessionPresent = 1;
         const res = await fetch("http://localhost:3000/devices/" + jsonCONNECT['Client-ID'])
@@ -40,8 +43,14 @@ io.on("connection",  (socket) => {
         }else{
           const json = await res.json();
           returnCode = 0;
+          console.log(socket.id);
+          let jsonIDClient = {
+            "clientId": jsonCONNECT['Client-ID'],
+            "socketId": socket.id
+          }
+          clients.push(jsonIDClient);
         }
-
+        console.log(clients);
         let jsonCONNACK = {
           "sessionPresent": sessionPresent,
           "returnCode": returnCode
@@ -92,7 +101,7 @@ io.on("connection",  (socket) => {
     let returnCode;
     let topic = jsonPUBLISH['Topic'];
 
-    const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['Client-ID'] + "/" + topic.replaceAll('/', "-"))
+    const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['Client-ID'] + "/" + topic.replaceAll('/', "-")) 
     if(res.status == 500){
       console.log('error in server');
       return ;
@@ -101,7 +110,30 @@ io.on("connection",  (socket) => {
       console.log(json);
       if(json['isPublisher'] === 1){
         console.log('HOLAAA');
-        socket.broadcast.emit('PUBLISH',jsonPUBLISH);  
+        console.log(topic);
+        //Aquí debería consultar por los suscriptores de ese tópico
+        const res = await fetch("http://localhost:3000/subscribers/listTopic/" + topic.replaceAll('/', "-"))
+        if(res.status == 500){
+          returnCode = 1;
+        }else if(res.status == 202){
+          returnCode = 2
+        }else{
+          const json = await res.json();
+          console.log(json[0]['Device'] +"="+ clients[0]["clientId"])
+          console.log(json);
+          returnCode = 0;
+          //Enviar a cada socket asociado al ID device
+          for(let i = 0; i < clients.length; i++){
+            for(let j = 0; j < json.length; j++){
+              
+              if (json[j]['Device'] == clients[i].clientId){ //<-Revisar esto
+                io.to(clients[i]['socketId']).emit("PUBLISH",jsonPUBLISH)  
+                console.log(jsonPUBLISH['Message']);
+              }
+            }
+          }
+        }
+        //socket.broadcast.emit('PUBLISH',jsonPUBLISH);  
       }else{
         //En este caso que se hace?
         //io.to(socket.id).emit('ERROR',jsonSUBACK);
