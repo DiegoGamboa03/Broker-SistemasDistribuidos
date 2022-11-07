@@ -11,6 +11,10 @@ const io = new socketServer(server, {
   cors: '*'
 });
 
+//Para abortar fetch request
+const controller = new AbortController();
+const signal = controller.signal;
+
 //Middleware
 app.use(cors());
 app.use(morgan("dev"));
@@ -32,32 +36,38 @@ io.on("connection",  (socket) => {
         //verificacion: si el ID que se esta intentando conectar esta en la tabla device
         //verificacion:  
         
-      
+        //Función para temporizar respuesta del server
+       
         
         sessionPresent = 1;
-        const res = await fetch("http://localhost:3000/devices/" + jsonCONNECT['Client-ID'])
-        if(res.status == 500){
-          returnCode = 1;
-        }else if(res.status == 202){
-          returnCode = 2
-        }else{
-          const json = await res.json();
-          returnCode = 0;
-          console.log(socket.id);
-          let jsonIDClient = {
-            "clientId": jsonCONNECT['Client-ID'],
-            "socketId": socket.id
+        try{
+          const res = await fetch("http://localhost:3000/devices/" + jsonCONNECT['Client-ID'], {
+            signal: AbortSignal.timeout(5000) 
+          });
+          if(res.status == 500){
+            returnCode = 1;
+          }else if(res.status == 202){
+            returnCode = 2
+          }else{
+            const json = await res.json();
+            returnCode = 0;
+            console.log(socket.id);
+            let jsonIDClient = {
+              "clientId": jsonCONNECT['Client-ID'],
+              "socketId": socket.id
+            }
+            clients.push(jsonIDClient);
           }
-          clients.push(jsonIDClient);
-        }
-        console.log(clients);
-        let jsonCONNACK = {
-          "sessionPresent": sessionPresent,
-          "returnCode": returnCode
-        }
-        console.log(jsonCONNACK);
-        io.to(socket.id).emit('CONNACK',jsonCONNACK);
-        
+          console.log(clients);
+          let jsonCONNACK = {
+            "sessionPresent": sessionPresent,
+            "returnCode": returnCode
+          }
+          console.log(jsonCONNACK);
+          io.to(socket.id).emit('CONNACK',jsonCONNACK);
+        }catch(err){
+          console.log("Error: El servidor tardó demasiado tiempo en responder")  
+        }            
     });
 
     socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
