@@ -54,28 +54,24 @@ io.on("connection",  (socket) => {
             returnCode = 2
           }else{
             const json = await res.json();
-            console.log(json)
             returnCode = 0;
-            console.log(socket.id);
             let jsonIDClient = {
               "clientId": jsonCONNECT['Client-ID'],
               "socketId": socket.id,
               "deviceType": json['Type']
             }
-            console.log(jsonIDClient);
+
             jToken = jwt.sign({
               'clientId':jsonCONNECT['Client-ID']
             }, 'secretkey', {expiresIn: '24h'});
 
             clients.push(jsonIDClient);
           }
-          console.log(clients);
           let jsonCONNACK = {
             "sessionPresent": sessionPresent,
             "returnCode": returnCode,
             "token": jToken,
           }
-          console.log(jsonCONNACK);
           io.to(socket.id).emit('CONNACK',jsonCONNACK);
         }catch(err){
           console.log('Se agotó el tiempo de espera de la conexión')  
@@ -86,50 +82,53 @@ io.on("connection",  (socket) => {
     socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
       let returnCode;
       // Aqui tiene que estar la parte donde se verifica la bbdd mediante la api
-      console.log(jsonSUBSCRIBE);
       //Verificar topic en Topics
       let topic = jsonSUBSCRIBE['Topic'];
-
-      try{
-        const res = await fetch("http://localhost:3000/topics/" + topic.replaceAll('/', "-"), {
-          signal: AbortSignal.timeout(5000)
-        })
-        if(res.status == 500){
-          returnCode = 1;
-        }else if(res.status == 202){
-          returnCode = 2
-        }else{ 
-          const json = await res.json();
-          console.log(json);
-          returnCode = 0;
-
-          const req = await fetch("http://localhost:3000/subscribers/add/",{
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              Device: jsonSUBSCRIBE['Client-ID'],
-              Topic: topic.replaceAll('/', "-")
+      //Aquí verifica el token
+      jwt.verify(jsonSUBSCRIBE['token'], 'secretkey', async (err, authData) => {
+        if(err) {
+          console.log(err);
+        } else {
+          try{
+            const res = await fetch("http://localhost:3000/topics/" + topic.replaceAll('/', "-"), {
+              signal: AbortSignal.timeout(5000)
             })
-          });
+            if(res.status == 500){
+              returnCode = 1;
+            }else if(res.status == 202){
+              returnCode = 2
+            }else{ 
+              const json = await res.json();
+              returnCode = 0;
+    
+              const req = await fetch("http://localhost:3000/subscribers/add/",{
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  Device: jsonSUBSCRIBE['Client-ID'],
+                  Topic: topic.replaceAll('/', "-")
+                })
+              });
+            }
+            let jsonSUBACK= {
+              "returnCode": returnCode
+            }
+            io.to(socket.id).emit('SUBACK',jsonSUBACK);
+    
+          }catch(err){
+            console.log('Se agotó el tiempo de espera de la conexión')
+          }
         }
-        let jsonSUBACK= {
-          "returnCode": returnCode
-        }
-        console.log(jsonSUBACK);
-        io.to(socket.id).emit('SUBACK',jsonSUBACK);
-
-      }catch(err){
-        console.log('Se agotó el tiempo de espera de la conexión')
-      }
+      })
+      
       
     });
 
   socket.on("PUBLISH", async (jsonPUBLISH) => {
     let returnCode;
     let topic = jsonPUBLISH['Topic'];
-    console.log(jsonPUBLISH['token'])
     //Aquí verifica el token
     jwt.verify(jsonPUBLISH['token'], 'secretkey', async (err, authData) => {
       if(err) {
