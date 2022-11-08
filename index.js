@@ -54,12 +54,15 @@ io.on("connection",  (socket) => {
             returnCode = 2
           }else{
             const json = await res.json();
+            console.log(json)
             returnCode = 0;
             console.log(socket.id);
             let jsonIDClient = {
               "clientId": jsonCONNECT['Client-ID'],
-              "socketId": socket.id
+              "socketId": socket.id,
+              "deviceType": json['Type']
             }
+            console.log(jsonIDClient);
             jToken = jwt.sign({
               'clientId':jsonCONNECT['Client-ID']
             }, 'secretkey', {expiresIn: '24h'});
@@ -86,6 +89,7 @@ io.on("connection",  (socket) => {
       console.log(jsonSUBSCRIBE);
       //Verificar topic en Topics
       let topic = jsonSUBSCRIBE['Topic'];
+
       try{
         const res = await fetch("http://localhost:3000/topics/" + topic.replaceAll('/', "-"), {
           signal: AbortSignal.timeout(5000)
@@ -164,7 +168,12 @@ io.on("connection",  (socket) => {
                   }
                 }
               }
+              let jsonPUBACK = {
+                'returnCode': returnCode,
+              }
+              io.to(socket.id).emit('PUBACK',jsonPUBACK);
             }
+
             //socket.broadcast.emit('PUBLISH',jsonPUBLISH);  
           }else{
             //En este caso que se hace?
@@ -173,13 +182,8 @@ io.on("connection",  (socket) => {
         }
       }
     });
-    
-   
 
-
-
-    //Hay que revisar que el idClient que manda el publish sea publicador de ese topico
-    
+    //Hay que revisar que el idClient que manda el publish sea publicador de ese topico 
     
   });
 
