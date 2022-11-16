@@ -31,8 +31,8 @@ var clients = []
 io.on("connection",  (socket) => {
     
     //console.log(clients);
-    socket.on("CONNECT", async (jsonCONNECT) => {
-        let sessionPresent, returnCode; 
+  socket.on("CONNECT", async (jsonCONNECT) => {
+        let returnCode; 
         //returnCode: 0 = Accepted
         //            1 = Server Error
         //            2 = Not registered
@@ -42,68 +42,59 @@ io.on("connection",  (socket) => {
         //verificacion:  
         
         //Función para temporizar respuesta del server
-       
-        
-        sessionPresent = 1;
-        try{
-          const res = await fetch("http://localhost:3000/devices/" + jsonCONNECT['Client-ID'], {
-            signal: AbortSignal.timeout(5000) 
-          });
+      
+          const res = await fetch("http://localhost:3000/devices/" + jsonCONNECT['clientID']);
           if(res.status == 500){
             returnCode = 1;
           }else if(res.status == 202){
-            returnCode = 2
+            returnCode = 2;
           }else{
             const json = await res.json();
+
             returnCode = 0;
             let jsonIDClient = {
-              "clientId": jsonCONNECT['Client-ID'],
-              "socketId": socket.id,
-              "deviceType": json['Type']
+              "clientID": jsonCONNECT['clientID'],
+              "socketID": socket.id,
+              "deviceType": json['deviceType']
             }
 
             jToken = jwt.sign({
-              'clientId':jsonCONNECT['Client-ID']
+              'clientID':jsonCONNECT['clientID']
             }, 'secretkey', {expiresIn: '24h'});
 
-            console.log(jsonIDClient)
+
             clients.push(jsonIDClient);
+
             let jsonCONNACK = {
-              "sessionPresent": sessionPresent,
               "returnCode": returnCode,
-              "token": jToken,
-              "type": json['Type']
+              "jwt": jToken,
+              "deviceType": json['deviceType']
             }
+
             io.to(socket.id).emit('CONNACK',jsonCONNACK);
+
             return;
           }
+          
           let jsonCONNACK = {
-            "sessionPresent": sessionPresent,
             "returnCode": returnCode,
-            "token": jToken
           }
-          io.to(socket.id).emit('CONNACK',jsonCONNACK);
-        }catch(err){
-          console.log('Se agotó el tiempo de espera de la conexión')  
-        }            
-    });
 
+          io.to(socket.id).emit('CONNACK',jsonCONNACK);        
+  });
 
-    socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
-      let returnCode;
+  socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
+      let returnCode,topic;
       // Aqui tiene que estar la parte donde se verifica la bbdd mediante la api
       //Verificar topic en Topics
-      let topic = jsonSUBSCRIBE['Topic'];
+      topic = jsonSUBSCRIBE['topic'];
       //Aquí verifica el token
       try{
         jwt.verify(jsonSUBSCRIBE['token'], 'secretkey', async (err, authData) => {
           if(err) {
             console.log(err);
           } else {
-            try{
-              const res = await fetch("http://localhost:3000/topics/" + topic.replaceAll('/', "-"), {
-              signal: AbortSignal.timeout(5000)
-            })
+              const res = await fetch("http://localhost:3000/topics/" + topic.replaceAll('/', "-"))
             if (res.status == 500) {
               returnCode = 1;
             } else if (res.status == 202) {
@@ -118,57 +109,35 @@ io.on("connection",  (socket) => {
                   'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                  Device: jsonSUBSCRIBE['Client-ID'],
-                  Topic: topic.replaceAll('/', "-")
+                  device: jsonSUBSCRIBE['clientID'],
+                  topic: topic.replaceAll('/', "-")
                 })
               });
             }
+            
             let jsonSUBACK = {
               "returnCode": returnCode
             }
-            io.to(socket.id).emit('SUBACK', jsonSUBACK);
-            console.log(clients)
-
-            //Aquí se almacena la suscripción en el log_devices
-            console.log(jsonSUBSCRIBE['Client-ID'])
-            const req = await fetch("http://localhost:3000/log_devices/add/", {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                Device: jsonSUBSCRIBE['Client-ID'],
-                Action_done: 'SUBSCRIBE',
-                Topic: jsonSUBSCRIBE['Topic'],
-                Date_time: moment().format('YYYY-MM-DD HH:mm:ss')
-              })
-            });
-            console.log(moment().format('YYYY-MM-DD HH:mm:ss'));
-
-            }catch(error){
-              console.log(error)
-              let jsonERROR = {
-                'error': error
-              }
-              io.to(socket.id).emit('ERROR',jsonERROR);
-            }
             
+            io.to(socket.id).emit('SUBACK', jsonSUBACK);
+            //Aquí se almacena la suscripción en el log_devices
           }
         })
       }catch(error){
-        console.log(error)
+
         let jsonERROR = {
           'error': error
         }
+
         io.to(socket.id).emit('ERROR',jsonERROR);
       }
-      
-      
-    });
+  });
 
   socket.on("PUBLISH", async (jsonPUBLISH) => {
-    let returnCode;
-    let topic = jsonPUBLISH['Topic'];
+    
+    let returnCode, topic;
+    
+    topic = jsonPUBLISH['topic'];
     //Aquí verifica el token
     try{
       jwt.verify(jsonPUBLISH['token'], 'secretkey', async (err, authData) => {
@@ -177,16 +146,12 @@ io.on("connection",  (socket) => {
         } else {
 
           //Aquí hace las consultas a la BD
-          const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['Client-ID'] + "/" + topic.replaceAll('/', "-")) 
+          const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['clientID'] + "/" + topic.replaceAll('/', "-")) 
           if(res.status == 500){
-            console.log('error in server');
             return ;
           }else{
-            
             const json = await res.json();
-            console.log(json);
             if(json['isPublisher'] === 1){
-              console.log(topic);
               //Aquí debería consultar por los suscriptores de ese tópico
               const res = await fetch("http://localhost:3000/subscribers/listTopic/" + topic.replaceAll('/', "-"))
               if(res.status == 500){
@@ -195,39 +160,22 @@ io.on("connection",  (socket) => {
                 returnCode = 2
               }else{
                 const json = await res.json();
-                
-                console.log(json);
                 returnCode = 0;
                 //Enviar a cada socket asociado al ID device
-                for(let i = 0; i < clients.length; i++){
+                
+                for(let i = 0; i < clients.length; i++){ //Deberiamos cambiarle el nombre a clients, es poco claro
                   for(let j = 0; j < json.length; j++){
-                    
-                    if (json[j]['Device'] == clients[i].clientId){ //<-Revisar esto
-                      io.to(clients[i]['socketId']).emit("PUBLISH",jsonPUBLISH)  
-                      console.log(jsonPUBLISH['Message']);
+                    if (json[j]['device'] == clients[i]['clientID']){ 
+                      io.to(clients[i]['socketID']).emit("PUBLISH",jsonPUBLISH)                        
                     }
                   }
                 }
+
                 let jsonPUBACK = {
                   'returnCode': returnCode,
                 }
                 io.to(socket.id).emit('PUBACK',jsonPUBACK);
               }
-
-              //Almacenar publicación en el Log
-              const req = await fetch("http://localhost:3000/log_devices/add/",{
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    Device: jsonPUBLISH['Client-ID'],
-                    Action_done: 'PUBLISH',
-                    Topic: jsonPUBLISH['Topic'],
-                    Date_time: moment().format('YYYY-MM-DD HH:mm:ss')
-                })
-              });
-
               //socket.broadcast.emit('PUBLISH',jsonPUBLISH);  
             }else{
               //En este caso que se hace?
@@ -256,7 +204,7 @@ io.on("connection",  (socket) => {
         })
 
       });
-      if(req.status == 200){
+      /*if(req.status == 200){
         const req1 = await fetch("http://localhost:3000/topics/add/",{
           method: 'POST',
           headers: {
@@ -269,7 +217,7 @@ io.on("connection",  (socket) => {
         });
       }else{
 
-      }
+      }*/
       
   })
 
@@ -280,26 +228,13 @@ io.on("connection",  (socket) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        id: jsonREGCLIENT['ID'],
-        type: jsonREGCLIENT['type']
+        id: jsonREGCLIENT['clientID'],
+        type: jsonREGCLIENT['deviceType']
       })
     });
     
   })
 
-  socket.on('REG-PUBLISHER', async(jsonREGPUBLISHER) => {
-    const req = await fetch("http://localhost:3000/publishers/add/",{
-     method: 'POST',
-     headers: {
-       'Content-Type': 'application/json'
-     },
-     body: JSON.stringify({
-       id: jsonREGPUBLISHER['clientID'],
-       topic: jsonREGPUBLISHER['topic']
-     })
-   });
-   
- })
 });
 
 //Inicia el server
