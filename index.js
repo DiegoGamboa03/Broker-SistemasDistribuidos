@@ -3,7 +3,7 @@ import morgan, { token } from "morgan";
 import {Server as socketServer} from 'socket.io';
 import http, { ClientRequest } from 'http'
 import cors from 'cors';
-var RuleEngine = require("node-rules");
+import checkRule from "./rules.js";
 
 
 //Configuraciones del server
@@ -21,14 +21,6 @@ const signal = controller.signal;
 //Middleware
 app.use(cors());
 app.use(morgan("dev"));
-
-//Array of clients JSON
-var clients = []
-
-//Inicializar Rule Engine
-var R = new RuleEngine();
-//Aquí se tiene que hacer una función que añada las reglas desde la BD
-
 
 io.on("connection",  (socket) => {
     
@@ -85,9 +77,39 @@ io.on("connection",  (socket) => {
       //Aquí se almacena la suscripción en el log_devices
   });
 
-  
+  socket.on("PUBLISH", async (jsonPUBLISH) => {
+    
+    let returnCode, topic;
+    topic = jsonPUBLISH['topic'];
+
+    const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['clientID'] + "/" + topic.replaceAll('/', "-")) 
+          if(res.status == 500){
+            return ;
+          }else{
+            const json = await res.json();
+            if(json['isPublisher'] === 1){
+              //Aquí debería consultar por los suscriptores de ese tópico
+              const res = await fetch("http://localhost:3000/subscribers/listTopic/" + topic.replaceAll('/', "-"))
+              if(res.status == 500){
+                returnCode = 1;
+              }else if(res.status == 202){
+                returnCode = 2
+              }else{
+                const json = await res.json();
+                returnCode = 0;
+                //Enviar a cada socket asociado al ID device
+                
+                let jsonPUBACK = {
+                  'returnCode': returnCode,
+                }
+                io.to(socket.id).emit('PUBACK',jsonPUBACK);
+              }
+            }
+    };
+  });
+
 });
 
 //Inicia el server
 server.listen(4000)
-console.log('Server started in port 4000')
+console.log('Server started in port 4000');
