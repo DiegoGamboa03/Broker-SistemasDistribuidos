@@ -13,11 +13,6 @@ const io = new socketServer(server, {
   cors: '*'
 });
 
-//Para abortar fetch requests
-const controller = new AbortController();
-const signal = controller.signal;
-
-
 //Middleware
 app.use(cors());
 app.use(morgan("dev"));
@@ -83,29 +78,39 @@ io.on("connection",  (socket) => {
     topic = jsonPUBLISH['topic'];
 
     const res = await fetch("http://localhost:3000/publishers/isPublisher/"+ jsonPUBLISH['clientID'] + "/" + topic.replaceAll('/', "-")) 
+    if(res.status == 500){
+      return ;
+    }else{
+      const json = await res.json();
+      if(json['isPublisher'] === 1){  
+        const res = await fetch("http://localhost:3000/subscribers/listTopic/" + topic.replaceAll('/', "-"))
+        if(res.status == 500){
+          
+          returnCode = 1;
+
+        }else if(res.status == 202){
+          
+          returnCode = 2;
+
+        }else{
+
+          const json = await res.json(); //Lista de subscriptores 
+          returnCode = 0;
+          const res = await fetch("http://localhost:3000/utils/getStatus")//Recibe los datos del json de getStatus
           if(res.status == 500){
             return ;
           }else{
-            const json = await res.json();
-            if(json['isPublisher'] === 1){
-              //Aquí debería consultar por los suscriptores de ese tópico
-              const res = await fetch("http://localhost:3000/subscribers/listTopic/" + topic.replaceAll('/', "-"))
-              if(res.status == 500){
-                returnCode = 1;
-              }else if(res.status == 202){
-                returnCode = 2
-              }else{
-                const json = await res.json();
-                returnCode = 0;
-                //Enviar a cada socket asociado al ID device
-                
-                let jsonPUBACK = {
-                  'returnCode': returnCode,
-                }
-                io.to(socket.id).emit('PUBACK',jsonPUBACK);
-              }
-            }
-    };
+
+            
+            //Tiene que actualizar los status de los dispositivos como sea necesario
+            //Enviar los datos actualizados a la API, para que se guarde en la bbdd 
+            //Enviar los datos actualizados a la app, para que procese los datos y los muestre 
+            //Esto tiene que ser un emit para todos
+          } 
+        }
+      }
+    }
+    
   });
 
 });
