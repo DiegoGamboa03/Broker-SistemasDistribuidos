@@ -4,6 +4,8 @@ import {Server as socketServer} from 'socket.io';
 import http, { ClientRequest } from 'http'
 import cors from 'cors';
 import checkRule from "./rules.js";
+import saveState from "./saveStatesAPI.js";
+import { readFile } from "fs";
 
 //Client Array
 var clients = []
@@ -20,13 +22,18 @@ app.use(cors());
 app.use(morgan("dev"));
 
 io.on("connection",  (socket) => {
-  console.log(socket.id)
-    
-    //console.log(clients);
+  //Prueba envío de imagen
+  /*fs.readFile('C:\Users\Elias Peñalver\Pictures\image.png', function(err, buf){
+    // it's possible to embed binary data
+    // within arbitrarily-complex objects
+    socket.emit('image', { image: true, buffer: buf.toString('base64') });
+    console.log('image file is initialized');
+  });*/
+  console.log('Connection iniciado')
   socket.on("CONNECT", async (jsonCONNECT) => {
-    let returnCode, jsonDevices;
+    let returnCode, jsonDevices = [];
     console.log('Connect iniciado')
-
+    var cont = 0;
     //CONSULTA A LA BD CONSULTANDO EL ID DE USUARIO Y CONTRASEÑA   
 
     const res = await fetch("http://localhost:3000/users/isUser/" + jsonCONNECT['user']+"/"+jsonCONNECT['password']);
@@ -34,9 +41,9 @@ io.on("connection",  (socket) => {
             returnCode = 1;
           }else if(res.status == 202){
             returnCode = 2;
-          }else{
+          }else {
+            
             //Recibir de la API  Json {returncode, [{IDRoom, [{IDDevice, Status, Value*}]]}
-            console.log('Luego de verificar User')
             returnCode = 0;
             const res= await fetch("http://localhost:3000/utils/getStatus")//Recibe los datos del json de getStatus
             if(res.status == 500){
@@ -63,9 +70,10 @@ io.on("connection",  (socket) => {
               returnCode,
               jsonDevices
           }
+          console.log(clients);
+          console.log(socket.id);
           io.to(socket.id).emit('CONNACK',jsonCONNACK)
           console.log('CONNACK enviado')
-
   });
 
   socket.on("SUBSCRIBE", async(jsonSUBSCRIBE) => {
@@ -76,7 +84,7 @@ io.on("connection",  (socket) => {
           returnCode = 1;
       } else if (res.status == 202) {
           returnCode = 2
-      } else {
+      } else{
         const json = await res.json();
         returnCode = 0;
 
@@ -124,57 +132,138 @@ io.on("connection",  (socket) => {
 
           let jsonSubs = await res.json(); //Lista de subscriptores 
           returnCode = 0;
+          let newDevicesStates = []
           
+          
+          for(let i = 0; i < Object.keys(jsonSubs).length; i++){
+            //json de dispositivo mensaje
+            let jsonDeviceState = {
+              "Device": jsonSubs[i]['Device'],
+              "Message": ''
+            }
 
-          //const jsonStatus = await res.json()
-
-          //Enviar los datos actualizados a la app, para que procese los datos y los muestre
-
-          let jsonPUBLISH = {
-            "Devices": jsonSubs,
-            "Message": message
+            const res2 = await fetch("http://localhost:3000/device_rules/findRule/"+ jsonSubs[i]['Device'] + "/" + topic.replaceAll('/', "-"))
+            if(res2.status == 500){
+              returnCode = 1;
+            }else if(res2.status == 202){
+              returnCode = 2;
+              //Añadir mensaje sin alterar al dispositivo ya que no está asociado a ninguna regla
+              jsonDeviceState.Message = message;
+              newDevicesStates.push(jsonDeviceState);
+              saveState(jsonSubs[i]['Device'],message)
+            }else{ //->Encontró regla asociada al dispositivo
+              let jsonDeviceRule =  await res2.json(); //->Esto es un array de json
+              console.log(jsonDeviceRule)
+              const res = await fetch("http://localhost:3000/rules/getRule/"+ jsonDeviceRule[0]['ID_rule']);
+              if(res.status == 500){
+                returnCode = 1;
+              }else if(res.status == 202){
+                returnCode = 2;
+              }else{
+                let jsonRule = await res.json();
+                //Verificar aplicación de reglas
+                let flag = checkRule(jsonRule[0]['Fact'], jsonRule[0]['Operator'], jsonRule[0]['Value'], message);
+                if(flag){
+                  //Agregar device más mensaje alterado de acuerdo a la condición de la regla
+                  jsonDeviceState.Message = jsonDeviceRule[0]['message']
+                  newDevicesStates.push(jsonDeviceState);
+                  saveState(jsonSubs[i]['Device'],jsonDeviceRule[0]['message'])
+                }else{ //-->En caso de que exista la regla pero no se cumpla
+                  //Agregar device con mensaje sin alterar
+                  jsonDeviceState.Message = message;
+                  newDevicesStates.push(jsonDeviceState);
+                  saveState(jsonSubs[i]['Device'],message)
+                }
+              }
+            }
           }
-
+          let jsonPUBLISH = {
+            "Subscribers": newDevicesStates
+          }
           //Enviar a cada socket asociado IDdevice y el mensaje de publish
           io.emit("PUBLISH", jsonPUBLISH)
-          console.log('PUBLISH enviado')
-
-          //Enviar los datos actualizados a la API, para que se guarde en la bbdd 
-          if ((message == "state:on") || (message == "state:off")) {
-            console.log(Object.keys(jsonSubs).length)
-            for (let i = 0; i < Object.keys(jsonSubs).length; i++) {
-              const req = await fetch("http://localhost:3000/devices/updateStatus/" + jsonSubs[i]['Device'], {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  status: message.slice(6)
-                })
-              })
-            }
-            //Enviar values a la API
-          }else if(message.slice(0,4) == 'value'){
-            for (let i = 0; i < Object.keys(jsonSubs).length; i++) {
-              const req = await fetch("http://localhost:3000/devices/updateValue/" + jsonSubs[i]['Device'], {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  value: message.slice(6)
-                })
-              })
-            }
-          }
-            
+          console.log('PUBLISH enviado') 
         }
       }
-    }
-    
+    }    
   });
+  
+  /****************************************************/
+  //Operaciones de registro
+  socket.on('REG-USER', async(jsonREGUSER) => { 
+    const req = await fetch("http://localhost:3000/users/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGUSER['userID'], 
+       password: jsonREGUSER['password'] 
+     }) 
+   });  
+  }) 
+  
+  socket.on('REG-DEVICE', async(jsonREGDEVICE) => { 
+    const req = await fetch("http://localhost:3000/devices/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGDEVICE['deviceID'], 
+       type: jsonREGDEVICE['type'],
+       status: jsonREGDEVICE['status'],
+       room: jsonREGDEVICE['room']
+     }) 
+   });  
+  }) 
+  
+  socket.on('REG-PUBLISHER', async(jsonREGPUBLISHER) => { 
+    const req = await fetch("http://localhost:3000/publishers/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGPUBLISHER['deviceID'], 
+       topic: jsonREGPUBLISHER['topic'] 
+     }) 
+   });  
+  })
+  
+  socket.on('REG-ROOM', async(jsonREGROOM) => { 
+    const req = await fetch("http://localhost:3000/rooms/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGROOM['roomID'], 
+       floor: jsonREGROOM['floor'],
+       posX: jsonREGROOM['posX'],
+       posY: jsonREGROOM['posY']
+     }) 
+   });  
+  })
+  
+  socket.on('REG-FLOOR', async(jsonREGFLOOR) => { 
+    const req = await fetch("http://localhost:3000/floors/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGFLOOR['floorID']
+     }) 
+   });  
+  })
 
 });
+
+
+
+
+
 
 //Inicia el server
 server.listen(4000)

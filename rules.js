@@ -1,16 +1,12 @@
-export default function checkRule(condition,publisherMessage){
+///fact: tipo de variable a evaluar (state, time, temperature)
+//value: valor con el que se compara la condición 
+///operator: operador que compara value y valor de publisherMessage 
+//publisherMessage: mensaje del publicador (xxxxxxx:xxxxxx)
+
+
+export default function checkRule(fact, operator, value,publisherMessage){
     
-    let fact,operator,value,ruleTopic,message;
-
-    let conditionSplit = String(condition).split('-');
-
-    fact = conditionSplit[0];
-    operator = conditionSplit[1];
-    value = conditionSplit[2];
-    ruleTopic = conditionSplit[3];
-    message = conditionSplit[4];
-
-    let publisherMessageSplit = String(publisherMessage).split('-')
+    let publisherMessageSplit = String(publisherMessage).split(':')
     
     let publisherMessageFact = publisherMessageSplit[0];
 
@@ -18,7 +14,7 @@ export default function checkRule(condition,publisherMessage){
 
     console.log(publisherMessageValue);
 
-    let regexpTime = RegExp('^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'); 
+    let regexpTime = RegExp('^([0-1]?[0-9]|2[0-3])-[0-5][0-9]-[0-5][0-9]$'); 
     let regexpNumber = RegExp('^[0-9]*$') 
     let regexpString = RegExp('^[a-zA-Z]+$')
 
@@ -32,7 +28,7 @@ export default function checkRule(condition,publisherMessage){
         }else if(value.match(regexpString) && publisherMessageValue.match(regexpString)){ //Formato para letras
             flag = checkOperator(operator,publisherMessageValue,value) //nada mas deberiamos permitir que el operator de un string sea = o !=
         }
-        console.log('El valor de la flag es ' + flag)
+        return flag;
     }
 }
 
