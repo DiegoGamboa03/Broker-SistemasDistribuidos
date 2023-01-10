@@ -23,15 +23,11 @@ app.use(morgan("dev"));
 
 io.on("connection",  (socket) => {
   //Prueba envío de imagen
-  /*fs.readFile('C:\Users\Elias Peñalver\Pictures\image.png', function(err, buf){
-    // it's possible to embed binary data
-    // within arbitrarily-complex objects
-    socket.emit('image', { image: true, buffer: buf.toString('base64') });
-    console.log('image file is initialized');
-  });*/
+  
   console.log('Connection iniciado')
   socket.on("CONNECT", async (jsonCONNECT) => {
     let returnCode, jsonDevices = [];
+    let jsonFloors = [];
     console.log('Connect iniciado')
     var cont = 0;
     //CONSULTA A LA BD CONSULTANDO EL ID DE USUARIO Y CONTRASEÑA   
@@ -43,17 +39,51 @@ io.on("connection",  (socket) => {
             returnCode = 2;
           }else {
             
-            //Recibir de la API  Json {returncode, [{IDRoom, [{IDDevice, Status, Value*}]]}
+            //Recibir de la API  Json con pisos y habitaciones
             returnCode = 0;
-            const res= await fetch("http://localhost:3000/utils/getStatus")//Recibe los datos del json de getStatus
-            if(res.status == 500){
+            const res1= await fetch("http://localhost:3000/utils/getStatus")//Recibe los datos del json de getStatus
+            if(res1.status == 500){
               returnCode = 1 ;
-            } else if(res.status == 202){
+            } else if(res1.status == 202){
               returnCode = 2;
 
             }else{
-              jsonDevices = await res.json()
+              jsonFloors = await res1.json()
               returnCode = 0;
+
+              //Solicitar dispositivos
+              const res= await fetch("http://localhost:3000/devices/")
+              if(res.status == 500){
+                returnCode = 1 ;
+              } else if(res.status == 202){
+                returnCode = 2;
+  
+              }else{
+                jsonDevices = await res.json()
+               
+                returnCode = 0;
+
+                //Guardar disp en el arreglo de pisos y hab
+                for (let i = 0; i < jsonFloors.length; i++) {
+                 
+                  for (let j = 0; j < jsonFloors[i].Rooms.length; j++) {
+                    for (let k = 0; k < jsonDevices.length; k++) {
+                      console.log(jsonDevices[k]['Room'])
+                      if (jsonFloors[i].Rooms[j]['IDRoom'] = jsonDevices[k]['Room']) {
+                        let jsonDevice = {
+                          IDDevice: jsonDevices[k]['ID'],
+                          Type: jsonDevices[k]['Type'],
+                          Status: jsonDevices[k]['Status'],
+                          Value: jsonDevices[k]['Value']
+                        }
+                        jsonFloors[i].Rooms[j].Devices.push(jsonDevice)
+                      }
+                    }
+                  }
+                }
+
+              }
+
             }
 
             //Guardar usuario y socketID del cliente en el arreglo
@@ -68,7 +98,7 @@ io.on("connection",  (socket) => {
           }
           let jsonCONNACK = {
               returnCode,
-              jsonDevices
+              jsonFloors
           }
           console.log(clients);
           console.log(socket.id);
