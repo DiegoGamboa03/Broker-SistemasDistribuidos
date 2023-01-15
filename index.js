@@ -24,7 +24,6 @@ app.use(morgan("dev"));
 io.on("connection",  (socket) => {
   //Prueba envío de imagen
   
-  console.log('Connection iniciado')
   socket.on("CONNECT", async (jsonCONNECT) => {
     let returnCode, jsonDevices = [];
     let jsonFloors = [];
@@ -51,6 +50,7 @@ io.on("connection",  (socket) => {
               jsonFloors = await res1.json()
               returnCode = 0;
 
+
               //Solicitar dispositivos
               const res= await fetch("http://localhost:3000/devices/")
               if(res.status == 500){
@@ -65,11 +65,9 @@ io.on("connection",  (socket) => {
 
                 //Guardar disp en el arreglo de pisos y hab
                 for (let i = 0; i < jsonFloors.length; i++) {
-                 
                   for (let j = 0; j < jsonFloors[i].Rooms.length; j++) {
                     for (let k = 0; k < jsonDevices.length; k++) {
-                      console.log(jsonDevices[k]['Room'])
-                      if (jsonFloors[i].Rooms[j]['IDRoom'] = jsonDevices[k]['Room']) {
+                      if (jsonFloors[i].Rooms[j]['IDRoom'] == jsonDevices[k]['Room']) {
                         let jsonDevice = {
                           IDDevice: jsonDevices[k]['ID'],
                           Type: jsonDevices[k]['Type'],
@@ -243,6 +241,7 @@ io.on("connection",  (socket) => {
        id: jsonREGDEVICE['deviceID'], 
        type: jsonREGDEVICE['type'],
        status: jsonREGDEVICE['status'],
+       value: jsonREGDEVICE['value'],
        room: jsonREGDEVICE['room']
      }) 
    });  
@@ -288,11 +287,37 @@ io.on("connection",  (socket) => {
    });  
   })
 
+  socket.on('REG-RULE', async(jsonREGRULE) => { 
+    const req = await fetch("http://localhost:3000/rules/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       id: jsonREGRULE['ruleID'], 
+       fact: jsonREGRULE['fact'],
+       operator: jsonREGRULE['operator'],
+       value: jsonREGRULE['value']
+     }) 
+   });  
+  })
+
+  socket.on('REG-DEVICE_RULE', async(jsonREGDEVICERULE) => { 
+    const req = await fetch("http://localhost:3000/device_rules/add/",{ 
+     method: 'POST', 
+     headers: { 
+       'Content-Type': 'application/json' 
+     }, 
+     body: JSON.stringify({ 
+       rule: jsonREGDEVICERULE['ruleID'], 
+       device: jsonREGDEVICERULE['deviceID'],
+       topic: jsonREGDEVICERULE['topicID'],
+       message: jsonREGDEVICERULE['message']
+     }) 
+   });  
+  })
+
 });
-
-
-
-
 
 
 //Inicia el server
