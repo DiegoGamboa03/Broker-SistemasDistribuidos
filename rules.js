@@ -12,7 +12,6 @@ export default function checkRule(fact, operator, value,publisherMessage){
 
     let publisherMessageValue = publisherMessageSplit[1];
 
-    console.log(publisherMessageValue);
 
     let regexpTime = RegExp('^([0-1]?[0-9]|2[0-3])-[0-5][0-9]-[0-5][0-9]$'); 
     let regexpNumber = RegExp('^[0-9]*$') 
@@ -20,7 +19,7 @@ export default function checkRule(fact, operator, value,publisherMessage){
 
     let flag; 
 
-    if(fact == publisherMessageFact){ //Revisas que el fact sea igual (facts: temperature, time, state)
+    if(fact == publisherMessageFact){ //Revisas que el fact sea igual al del mensaje
         if(value.match(regexpTime) && publisherMessageValue.match(regexpTime)){ //Tiene formato para tiempo
             flag = checkOperator(operator,publisherMessageValue,value)
         }else if(value.match(regexpNumber) && publisherMessageValue.match(regexpNumber)){ //Formato numeros
